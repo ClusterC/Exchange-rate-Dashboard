@@ -1,2 +1,2 @@
-# reimagined-potato
-Exchange rate dashboard
+# Exchange rate dashboard
+
