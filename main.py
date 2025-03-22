@@ -79,15 +79,6 @@ currencies = {
     "USD/THB": "USDTHB=X"
 }
 
-# --- Currency Colors ---
-currency_colors = {
-    "EUR/THB": {"start": "rgb(128, 255, 165)", "end": "rgb(1, 191, 236)"},  # Green to Blue
-    "JPY/THB": {"start": "rgb(0, 221, 255)", "end": "rgb(77, 119, 255)"},  # Blue to Dark Blue
-    "GBP/THB": {"start": "rgb(55, 162, 255)", "end": "rgb(116, 21, 219)"},  # Blue to Purple
-    "AUD/THB": {"start": "rgb(255, 0, 135)", "end": "rgb(135, 0, 157)"},  # Red to Dark Red
-    "USD/THB": {"start": "rgb(255, 191, 0)", "end": "rgb(224, 62, 76)"},  # Yellow to Red
-}
-
 # --- Sidebar ---
 st.sidebar.header("Date Range Selection")
 today = date.today()
@@ -107,7 +98,7 @@ for currency, ticker in currencies.items():
 st.title("📊 Exchange Rate Statistics")
 st.write("Explore key statistics for major currency exchange rates.")
 
-# --- Statistics Display ---
+# --- Statistics Display ---------------------------------------------------------------------------------------------------------------------------
 st.header("Exchange Rate Summary")
 
 cols = st.columns(len(currencies), gap="small")  # Create columns dynamically based on the number of currencies
@@ -144,12 +135,12 @@ st.header("Exchange Rate Trends")
 st.write("Visualize the trends of exchange rates over the selected period using ECharts.")
 
 # Create columns for charts
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 
 # Create a selectbox for choosing the currency to display (outside the columns)
 selected_currency = st.selectbox("Select Currency for Charts", list(currencies.keys()))
 
-# --- Line: Basic Area Chart (ECharts) ---
+# --- Line: Basic Area Chart (ECharts) ---------------------------------------------------------------------------------------------------------------------------
 with col1:
     st.subheader("Basic Area Chart")
 
@@ -197,7 +188,7 @@ with col1:
     else:
         st.warning("Please select a currency.")
 
-# --- Bar: Basic Bar Chart (ECharts) ---
+# --- Bar: Basic Bar Chart (ECharts) ---------------------------------------------------------------------------------------------------------------------------
 with col2:
     st.subheader("Basic Bar Chart")
 
@@ -250,12 +241,12 @@ with col2:
                                 {
                                     "name": "Max",
                                     "coord": [max_index, max(rates)],
-                                    "itemStyle": {"color": "red"},
+                                    "itemStyle": {"color": "green"},
                                 },
                                 {
                                     "name": "Min",
                                     "coord": [min_index, min(rates)],
-                                    "itemStyle": {"color": "green"},
+                                    "itemStyle": {"color": "red"},
                                 },
                             ],
                             "symbolSize": 30,
@@ -270,7 +261,58 @@ with col2:
     else:
         st.warning("Please select a currency.")
 
-# --- Gradient Stacked Area Chart (ECharts) ---
+# --- Basic Candlestick Chart (ECharts) ---------------------------------------------------------------------------------------------------------------------------
+with col3:
+    st.subheader("Basic Candlestick Chart")
+
+    if selected_currency in exchange_data:
+        data = exchange_data[selected_currency]
+        if not data.empty:
+            # Prepare data for ECharts
+            dates = data.index.strftime('%Y-%m-%d %H:%M').tolist() if selected_interval not in ["1d", "1wk"] else data.index.strftime('%Y-%m-%d').tolist()
+            
+            # Candlestick data format: [open, close, lowest, highest]
+            candlestick_data = data[['Open', 'Close', 'Low', 'High']].values.tolist()
+
+            # Calculate the range of y-axis
+            all_rates = data[['Open', 'Close', 'Low', 'High']].values.flatten().tolist()
+            min_rate = min(all_rates)
+            max_rate = max(all_rates)
+            range_y = max_rate - min_rate
+
+            # ECharts options for Basic Candlestick Chart
+            options = {
+                "title": {"text": f"{selected_currency} Candlestick Chart"},
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "cross"}},
+                "xAxis": {"type": "category", "data": dates, "name": "Date"},
+                "yAxis": {
+                    "type": "value",
+                    "name": "Exchange Rate",
+                    "min": f"{min_rate - range_y * 0.1:.2f}",
+                    "max": f"{max_rate + range_y * 0.1:.2f}",
+                },
+                "series": [
+                    {
+                        "data": candlestick_data,
+                        "type": "candlestick",
+                        "itemStyle": {
+                            "color": "green",
+                            "color0": "red",
+                            "borderColor": "green",
+                            "borderColor0": "red",
+                        },
+                    }
+                ],
+            }
+
+            # Display the chart using st_echarts
+            st_echarts(options=options, height="500px")
+        else:
+            st.warning(f"No data available for {selected_currency} to display the Basic Candlestick Chart.")
+    else:
+        st.warning("Please select a currency.")
+
+# --- Gradient Stacked Area Chart (ECharts) ---------------------------------------------------------------------------------------------------------------------------
 st.subheader("Gradient Stacked Area Chart (All Currencies - Daily Change %)")
 
 if all(not data.empty for data in exchange_data.values()):
@@ -346,8 +388,8 @@ if all(not data.empty for data in exchange_data.values()):
         "yAxis": {
             "type": "value",
             "name": "Daily Change %",
-            "min": f"{min_change - range_y * 0.3    :.2f}", # Adjusted to 10% padding
-            "max": f"{max_change + range_y * 0.3:.2f}", # Adjusted to 10% padding
+            "min": f"{min_change - range_y * 1:.2f}", # Adjusted to 10% padding
+            "max": f"{max_change + range_y * 1:.2f}", # Adjusted to 10% padding
         },
         "legend": {"data": list(currencies.keys())},
         "series": series_data,
@@ -357,3 +399,44 @@ if all(not data.empty for data in exchange_data.values()):
     st_echarts(options=options, height="500px")
 else:
     st.warning("Not all data available for all currencies to display the Gradient Stacked Area Chart.")
+    
+# เพิ่ม กราฟ Pie/Doughnut แสดงสัดส่วนหรือการกระจายของการเปลี่ยนแปลงในแต่ละสกุลเงิน
+st.subheader("Pie/Doughnut Chart (Daily Change %)")
+
+if all(not data.empty for data in exchange_data.values()):
+    # Prepare data for ECharts
+    pie_data = []
+    for currency, data in exchange_data.items():
+        # Calculate daily change percentage
+        daily_change = data['Close'].iloc[-1] - data['Close'].iloc[-2] if len(data) >= 2 else 0
+        daily_change_percent = (daily_change / data['Close'].iloc[-2]) * 100 if len(data) >= 2 and data['Close'].iloc[-2] != 0 else 0
+        pie_data.append({"value": abs(daily_change_percent), "name": currency})
+
+    # ECharts options for Pie/Doughnut Chart
+    options = {
+        "title": {"text": "Daily Change % Distribution", "left": "center"},
+        "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b} : {c} ({d}%)"},
+        "legend": {"orient": "vertical", "left": "left", "data": list(currencies.keys())},
+        "series": [
+            {
+                "name": "Daily Change %",
+                "type": "pie",
+                "radius": ["40%", "70%"],
+                "data": pie_data,
+                "emphasis": {
+                    "itemStyle": {
+                        "shadowBlur": 10,
+                        "shadowOffsetX": 0,
+                        "shadowColor": "rgba(0, 0, 0, 0.5)",
+                    }
+                },
+            }
+        ],
+    }
+
+    # Display the chart using st_echarts
+    st_echarts(options=options, height="500px")
+else:
+    st.warning("Not all data available for all currencies to display the Pie/Doughnut Chart.")
+    
+
