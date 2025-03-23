@@ -89,6 +89,9 @@ end_date = st.sidebar.date_input("End date", today)
 interval_options = ["1h", "1d", "1wk"]  # Reduced to 3 options
 selected_interval = st.sidebar.selectbox("Select Interval", interval_options, index=0)  # Default to 1h
 
+# Create a selectbox for choosing the currency to display (outside the columns)
+selected_currency = st.sidebar.selectbox("Select Currency for Charts", list(currencies.keys()))
+
 # Fetch data for all currencies
 exchange_data = {}
 for currency, ticker in currencies.items():
@@ -136,9 +139,6 @@ st.write("Visualize the trends of exchange rates over the selected period using 
 
 # Create columns for charts
 col1, col2, col3 = st.columns(3)
-
-# Create a selectbox for choosing the currency to display (outside the columns)
-selected_currency = st.selectbox("Select Currency for Charts", list(currencies.keys()))
 
 # --- Line: Basic Area Chart (ECharts) ---------------------------------------------------------------------------------------------------------------------------
 with col1:
@@ -400,43 +400,192 @@ if all(not data.empty for data in exchange_data.values()):
 else:
     st.warning("Not all data available for all currencies to display the Gradient Stacked Area Chart.")
     
-# เพิ่ม กราฟ Pie/Doughnut แสดงสัดส่วนหรือการกระจายของการเปลี่ยนแปลงในแต่ละสกุลเงิน
-st.subheader("Pie/Doughnut Chart (Daily Change %)")
+# --- Pie/Doughnut Chart and Heatmap in Columns ---
+st.subheader("Daily Change Analysis")
 
-if all(not data.empty for data in exchange_data.values()):
-    # Prepare data for ECharts
-    pie_data = []
-    for currency, data in exchange_data.items():
-        # Calculate daily change percentage
-        daily_change = data['Close'].iloc[-1] - data['Close'].iloc[-2] if len(data) >= 2 else 0
-        daily_change_percent = (daily_change / data['Close'].iloc[-2]) * 100 if len(data) >= 2 and data['Close'].iloc[-2] != 0 else 0
-        pie_data.append({"value": abs(daily_change_percent), "name": currency})
+col_left, col_right = st.columns([0.3, 0.7])
 
-    # ECharts options for Pie/Doughnut Chart
-    options = {
-        "title": {"text": "Daily Change % Distribution", "left": "center"},
-        "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b} : {c} ({d}%)"},
-        "legend": {"orient": "vertical", "left": "left", "data": list(currencies.keys())},
-        "series": [
-            {
-                "name": "Daily Change %",
-                "type": "pie",
-                "radius": ["40%", "70%"],
-                "data": pie_data,
-                "emphasis": {
-                    "itemStyle": {
-                        "shadowBlur": 10,
-                        "shadowOffsetX": 0,
-                        "shadowColor": "rgba(0, 0, 0, 0.5)",
+with col_left:
+    st.subheader("Pie/Doughnut Chart (Daily Change %)")
+
+    if all(not data.empty for data in exchange_data.values()):
+        # Prepare data for ECharts
+        pie_data = []
+        for currency, data in exchange_data.items():
+            # Calculate daily change percentage
+            daily_change = data['Close'].iloc[-1] - data['Close'].iloc[-2] if len(data) >= 2 else 0
+            daily_change_percent = (daily_change / data['Close'].iloc[-2]) * 100 if len(data) >= 2 and data['Close'].iloc[-2] != 0 else 0
+            pie_data.append({"value": abs(daily_change_percent), "name": currency})
+
+        # ECharts options for Pie/Doughnut Chart
+        options = {
+            "title": {"text": "Daily Change % Distribution", "left": "center"},
+            "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b} : {c} ({d}%)"},
+            "legend": {"orient": "vertical", "left": "left", "data": list(currencies.keys())},
+            "series": [
+                {
+                    "name": "Daily Change %",
+                    "type": "pie",
+                    "radius": ["40%", "70%"],
+                    "data": pie_data,
+                    "emphasis": {
+                        "itemStyle": {
+                            "shadowBlur": 10,
+                            "shadowOffsetX": 0,
+                            "shadowColor": "rgba(0, 0, 0, 0.5)",
+                        }
+                    },
+                }
+            ],
+        }
+
+        # Display the chart using st_echarts
+        st_echarts(options=options, height="500px", key="pie_chart")  # Added a key for streamlit to differentiate charts
+    else:
+        st.warning("Not all data available for all currencies to display the Pie/Doughnut Chart.")
+
+with col_right:
+    st.subheader("Heatmap (Daily Change %)")
+
+    if all(not data.empty for data in exchange_data.values()):
+        # Prepare data for ECharts
+        heatmap_data = []
+        dates = list(exchange_data.values())[0].index.strftime('%Y-%m-%d %H:%M').tolist() if selected_interval not in ["1d", "1wk"] else list(exchange_data.values())[0].index.strftime('%Y-%m-%d').tolist()
+        currencies_list = list(currencies.keys())
+
+        for i, (currency, data) in enumerate(exchange_data.items()):
+            # Calculate daily change percentage
+            daily_changes = data['Close'].pct_change() * 100
+            daily_changes.iloc[0] = 0  # Set the first value to 0 (no change for the first day)
+            rates = daily_changes.tolist()
+            for j, rate in enumerate(rates):
+                heatmap_data.append([j, i, rate])
+
+        # Calculate the range of values for the visual map
+        all_changes = []
+        for data in exchange_data.values():
+            daily_changes = data['Close'].pct_change() * 100
+            all_changes.extend(daily_changes.tolist())
+
+        # Remove NaN values
+        all_changes = [x for x in all_changes if pd.notna(x)]
+
+        if all_changes:  # Check if all_changes is not empty
+            min_change = min(all_changes)
+            max_change = max(all_changes)
+        else:
+            min_change = -1
+            max_change = 1
+
+        # ECharts options for Heatmap
+        options = {
+            "title": {"text": "Daily Change % Heatmap"},
+            "tooltip": {"position": "top", "formatter": "{c}"},
+            "grid": {"height": "60%", "top": "20%"},
+            "xAxis": {"type": "category", "data": dates, "splitArea": {"show": True}},
+            "yAxis": {"type": "category", "data": currencies_list, "splitArea": {"show": True}},
+            "visualMap": {
+                "min": min_change,
+                "max": max_change,
+                "orient": "horizontal",
+                "left": "center",
+                "bottom": "1%",
+                "text": ["High", "Low"],
+                "calculable": True,
+                "inRange": {"color": ["#fff9eb","#7c11a7"]},
+            },
+            "series": [
+                {
+                    "name": "Daily Change %",
+                    "type": "heatmap",
+                    "data": heatmap_data,
+                    "label": {"show": False},
+                    "emphasis": {
+                        "itemStyle": {
+                            "shadowBlur": 10,
+                            "shadowColor": 'rgba(0, 0, 0, 0.5)'
+                        }
                     }
-                },
-            }
-        ],
-    }
+                }
+            ],
+        }
+        # Display the chart using st_echarts
+        st_echarts(options=options, height="500px", key="heatmap") # Added a key for streamlit to differentiate charts
+    else:
+        st.warning("Not all data available for all currencies to display the Heatmap.")
 
-    # Display the chart using st_echarts
-    st_echarts(options=options, height="500px")
-else:
-    st.warning("Not all data available for all currencies to display the Pie/Doughnut Chart.")
     
+
+# --- Scatter Plot ---------------------------------------------------------------------------------------------------------------------------
+st.subheader("Scatter Plot (Closing Prices vs. Date)")
+
+if selected_currency in exchange_data:
+    data = exchange_data[selected_currency]
+    if not data.empty:
+        # Prepare data for ECharts
+        dates = data.index.strftime('%Y-%m-%d %H:%M').tolist() if selected_interval not in ["1d", "1wk"] else data.index.strftime('%Y-%m-%d').tolist()
+        closing_prices = data['Close'].tolist()
+
+        scatter_data = [[price, date] for price, date in zip(closing_prices, dates)]
+
+        # Calculate the range of x-axis
+        min_price = min(closing_prices)
+        max_price = max(closing_prices)
+        range_x = max_price - min_price
+
+        # ECharts options for Scatter Plot
+        options = {
+            "title": {"text": f"{selected_currency} Closing Prices Scatter Plot"},
+            "tooltip": {
+                "trigger": "item",
+                "formatter": "{c}",
+            },
+            "xAxis": {
+                "type": "value",
+                "name": "Closing Price",
+                "min": f"{min_price - range_x * 0.1:.2f}",
+                "max": f"{max_price + range_x * 0.1:.2f}",
+            },
+            "yAxis": {"type": "category", "data": dates, "name": "Date"},
+            "visualMap": {
+                "show": True,
+                "min": min_price,
+                "max": max_price,
+                "dimension": 0,  # Use the first dimension (price) for visual mapping
+                "inRange": {
+                    "color": ["#4292c6"],  # Darker blue gradient
+                    "symbolSize": 10, # Adjust symbol size based on value
+                },
+                "calculable": True,
+                "orient": "horizontal",
+                "left": "center",
+                "bottom": "5%",
+            },
+            "series": [
+                {
+                    "data": scatter_data,
+                    "type": "scatter",
+                    "symbolSize": 10,
+                    "itemStyle": {
+                        "color": "#08519c", # Darker default color
+                    },
+                    "emphasis": {
+                        "focus": "series",
+                        "itemStyle": {
+                            "color": "#FFD700",  # Highlight color on hover (Gold)
+                            "borderColor": "#8B4513", # Darker border color (Saddle Brown)
+                            "borderWidth": 2,
+                        },
+                    },
+                }
+            ],
+        }
+
+        # Display the chart using st_echarts
+        st_echarts(options=options, height="700px")
+    else:
+        st.warning(f"No data available for {selected_currency} to display the Scatter Plot.")
+else:
+    st.warning("Please select a currency.")
+
 
