@@ -480,7 +480,7 @@ with col_right:
         # ECharts options for Heatmap
         options = {
             "title": {"text": "Daily Change % Heatmap"},
-            "tooltip": {"position": "top", "formatter": "{c}"},
+            "tooltip": {"position": "top"},
             "grid": {"height": "60%", "top": "20%"},
             "xAxis": {"type": "category", "data": dates, "splitArea": {"show": True}},
             "yAxis": {"type": "category", "data": currencies_list, "splitArea": {"show": True}},
@@ -489,10 +489,10 @@ with col_right:
                 "max": max_change,
                 "orient": "horizontal",
                 "left": "center",
-                "bottom": "1%",
+                "bottom": "5%",
                 "text": ["High", "Low"],
                 "calculable": True,
-                "inRange": {"color": ["#fff9eb","#7c11a7"]},
+                "inRange": {"color": ['#FF0087', '#FFBF00', '#80FFA5', '#00DDFF']},
             },
             "series": [
                 {
@@ -514,8 +514,342 @@ with col_right:
     else:
         st.warning("Not all data available for all currencies to display the Heatmap.")
 
+# --- Radar Chart and Box Plot in Columns ---
+# --- Radar Chart and Box Plot in Columns ---
+st.subheader("Comparative Analysis")
+
+col_radar, col_box, col_gauge = st.columns([0.4, 0.4, 0.2])  # Added a column for the gauge
+
+with col_radar:
+    st.subheader("Radar Chart (Comparison of Exchange Rate Metrics)")
+
+    if all(not data.empty for data in exchange_data.values()):
+        # Prepare data for ECharts
+        radar_data = []
+        indicator = [
+            {"name": "Volatility", "max": 0, "min": 0},  # Added "min" for Volatility
+            {"name": "Daily Change %", "max": 0, "min": 0},  # Added "min" for Daily Change %
+            {"name": "Average Rate", "max": 0, "min": 0},  # Added "min" for Average Rate
+            {"name": "Max Rate", "max": 0, "min": 0},  # Added "min" for Max Rate
+            {"name": "Min Rate", "max": 0, "min": 0},  # Added "min" for Min Rate
+        ]
+
+        for currency, data in exchange_data.items():
+            latest_rate = data['Close'].iloc[-1]
+            previous_rate = data['Close'].iloc[-2] if len(data) >= 2 else latest_rate
+            daily_change = latest_rate - previous_rate
+            daily_change_percent = (daily_change / previous_rate) * 100 if previous_rate != 0 else 0  # Calculate daily change percentage
+            average_rate = data['Close'].mean()
+            max_rate = data['Close'].max()
+            min_rate = data['Close'].min()
+            volatility = data['Close'].std()
+
+            radar_data.append({
+                "value": [volatility, daily_change_percent, average_rate, max_rate, min_rate],  # Use daily change percentage
+                "name": currency,
+            })
+
+            # Update max and min values for indicators
+            indicator[0]["max"] = max(indicator[0]["max"], volatility * 1.1)  # Add 10% padding
+            indicator[0]["min"] = min(indicator[0]["min"], 0) # Volatility should not be negative.
+            
+            indicator[1]["max"] = max(indicator[1]["max"], daily_change_percent * 1.1)  # Add 10% padding
+            indicator[1]["min"] = min(indicator[1]["min"], daily_change_percent * 1.1) # Add 10% padding
+            
+            indicator[2]["max"] = max(indicator[2]["max"], average_rate * 1.1)  # Add 10% padding
+            indicator[2]["min"] = min(indicator[2]["min"], average_rate * 0.9) # Add 10% padding
+            
+            indicator[3]["max"] = max(indicator[3]["max"], max_rate * 1.1)  # Add 10% padding
+            indicator[3]["min"] = min(indicator[3]["min"], 0) # Max rate should not be negative.
+            
+            indicator[4]["max"] = max(indicator[4]["max"], min_rate * 1.1)  # Add 10% padding
+            indicator[4]["min"] = min(indicator[4]["min"], min_rate * 0.9)  # Add 10% padding and adjust for min rate
+
+            # Adjust min/max for Daily Change % to handle negative values properly
+            all_daily_changes = [item["value"][1] for item in radar_data]
+            max_daily_change = max(all_daily_changes)
+            min_daily_change = min(all_daily_changes)
+            
+            indicator[1]["max"] = max(indicator[1]["max"], max_daily_change * 1.1)
+            indicator[1]["min"] = min(indicator[1]["min"], min_daily_change * 1.1)
+            
+            # Ensure that min is always less than max
+            for ind in indicator:
+                if ind["min"] >= ind["max"]:
+                    ind["min"] = ind["max"] - (ind["max"] * 0.1) if ind["max"] != 0 else -1
+                    if ind["min"] >= ind["max"]:
+                        ind["min"] = ind["max"] - 1
+                    
+
+        # ECharts options for Radar Chart
+        options = {
+            # "title": {"text": "Radar Chart (Exchange Rate Metrics Comparison)"},
+            "legend": {"data": list(currencies.keys())},
+            "radar": {
+                "indicator": indicator,
+                "shape": "circle",  # Change shape to circle
+                "splitNumber": 5,  # Add more split lines
+                "axisName": {
+                    "color": "#428BD4",  # Change color of axis name
+                    "fontSize": 12,
+                },
+                "axisLine": {
+                    "lineStyle": {
+                        "color": "#bbbbbb",  # Change color of axis line
+                    }
+                },
+                "splitLine": {
+                    "lineStyle": {
+                        "color": "#bbbbbb",  # Change color of split line
+                    }
+                },
+            },
+            "series": [
+                {
+                    "name": "Exchange Rate Metrics",
+                    "type": "radar",
+                    "data": radar_data,
+                    "symbol": "circle",  # Change symbol to circle
+                    "symbolSize": 8,  # Change symbol size
+                    "lineStyle": {
+                        "width": 2,  # Change line width
+                    },
+                    "areaStyle": {
+                        "opacity": 0.2,  # Add area style
+                    },
+                    "emphasis": {
+                        "focus": "series",
+                    },
+                }
+            ],
+        }
+
+        # Display the chart using st_echarts
+        st_echarts(options=options, height="500px")
+    else:
+        st.warning("Not all data available for all currencies to display the Radar Chart.")
+
+with col_box:
+    st.subheader("Box Plot (Distribution and Outliers)")
+
+    if selected_currency in exchange_data:
+        data = exchange_data[selected_currency]
+        if not data.empty:
+            # Prepare data for ECharts
+            box_plot_data = []
+            outliers_data = []
+
+            # Calculate box plot statistics
+            Q1 = data['Close'].quantile(0.25)
+            Q3 = data['Close'].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+
+            # Extract outliers
+            outliers = data['Close'][(data['Close'] < lower_bound) | (data['Close'] > upper_bound)]
+
+            # Prepare box plot data
+            box_plot_data.append([data['Close'].min(), Q1, data['Close'].median(), Q3, data['Close'].max()])
+
+            # Prepare outliers data
+            for index, value in outliers.items():
+                outliers_data.append([0, value])
+
+            # Calculate the range of y-axis
+            all_rates = data['Close'].tolist()
+            min_rate = min(all_rates)
+            max_rate = max(all_rates)
+            range_y = max_rate - min_rate
+
+            # ECharts options for Box Plot
+            options = {
+                "title": {"text": f"{selected_currency} Box Plot"},
+                "tooltip": {"trigger": "item", "axisPointer": {"type": "shadow"}},
+                "grid": {"left": "10%", "right": "10%", "bottom": "15%"},
+                "xAxis": {
+                    "type": "category",
+                    "data": ["Exchange Rate"],
+                    "boundaryGap": True,
+                    "nameGap": 30,
+                    "splitArea": {"show": False},
+                    "axisLabel": {"formatter": "Exchange Rate"},
+                    "splitLine": {"show": False},
+                },
+                "yAxis": {
+                    "type": "value",
+                    "name": "Exchange Rate",
+                    "splitArea": {"show": True},
+                    "min": f"{min_rate - range_y * 0.1:.2f}",
+                    "max": f"{max_rate + range_y * 0.1:.2f}",
+                },
+                "series": [
+                    {
+                        "name": "Box Plot",
+                        "type": "boxplot",
+                        "data": box_plot_data,
+                        "itemStyle": {
+                            "color": "#5470c6",
+                            "borderColor": "#5470c6",
+                        },
+                    },
+                    {
+                        "name": "Outliers",
+                        "type": "scatter",
+                        "data": outliers_data,
+                        "itemStyle": {
+                            "color": "red",
+                        },
+                        "tooltip": {
+                            "formatter": "Outlier: {b}"
+                        }
+                    }
+                ],
+            }
+
+            # Display the chart using st_echarts
+            st_echarts(options=options, height="500px")
+        else:
+            st.warning(f"No data available for {selected_currency} to display the Box Plot.")
+    else:
+        st.warning("Please select a currency.")
+
+# Trend Gauge เอาไว้ดูคู่เงินที่เราเลือกมาว่ามีแนวโน้มเป็นขาขึ้นหรือลง
+with col_gauge:
+    st.subheader("Trend Gauge")
+
+    if selected_currency in exchange_data:
+        data = exchange_data[selected_currency]
+        if not data.empty:
+            # Calculate the trend based on the last two data points
+            latest_rate = data['Close'].iloc[-1]
+            previous_rate = data['Close'].iloc[-2] if len(data) >= 2 else latest_rate
+            trend = latest_rate - previous_rate
+
+            # Determine the trend direction and color
+            if trend > 0:
+                trend_direction = "Upward"
+                trend_color = "green"
+            elif trend < 0:
+                trend_direction = "Downward"
+                trend_color = "red"
+            else:
+                trend_direction = "Stable"
+                trend_color = "gray"
+
+            # ECharts options for Gauge
+            options = {
+                "title": {"text": f"{selected_currency} Trend"},
+                "tooltip": {"formatter": "{a} <br/>{b} : {c}"},
+                "series": [
+                    {
+                        "name": "Trend",
+                        "type": "gauge",
+                        "detail": {"formatter": "{value}"},
+                        "data": [{"value": f"{abs(trend):.2f} ","name": f"{trend_direction} Trend"}],
+                        "axisLine": {
+                            "lineStyle": {
+                                "color": [[1, trend_color]],  # Set color based on trend
+                                "width": 10,
+                            }
+                        },
+                        "progress": {
+                            "show": True,
+                            "width": 10,
+                        },
+                        "pointer": {
+                            "show": False,
+                        },
+                        "axisTick": {
+                            "show": False,
+                        },
+                        "splitLine": {
+                            "show": False,
+                        },
+                        "axisLabel": {
+                            "show": False,
+                        },
+                    }
+                ],
+            }
+
+            # Display the chart using st_echarts
+            st_echarts(options=options, height="400px")
+        else:
+            st.warning(f"No data available for {selected_currency} to display the Trend Gauge.")
+    else:
+        st.warning("Please select a currency.")
+
+        
     
 
+
+#--- Trendline หรือ Moving Average Overlay----------------------------------------------------------------------------------------------------
+st.subheader("Trendline and Moving Average Overlay")
+
+if selected_currency in exchange_data:
+    data = exchange_data[selected_currency]
+    if not data.empty:
+        # Prepare data for ECharts
+        dates = data.index.strftime('%Y-%m-%d %H:%M').tolist() if selected_interval not in ["1d", "1wk"] else data.index.strftime('%Y-%m-%d').tolist()
+        rates = data['Close'].tolist()
+
+        # Calculate the range of y-axis
+        min_rate = min(rates)
+        max_rate = max(rates)
+        range_y = max_rate - min_rate
+
+        # Calculate the moving average (e.g., 7-period moving average)
+        window_size = 7
+        moving_averages = data['Close'].rolling(window=window_size).mean().tolist()
+        
+        # Fill NaN values at the beginning with the first valid moving average
+        # Check if there are enough data points to calculate the moving average
+        if len(moving_averages) >= window_size:
+            for i in range(window_size - 1):
+                moving_averages[i] = moving_averages[window_size - 1]
+        else:
+            # If not enough data points, use the original rates for the moving average
+            moving_averages = rates[:]
+            st.warning(f"Not enough data points to calculate a {window_size}-period moving average. Using original data instead.")
+
+        # ECharts options for Trendline or Moving Average Overlay
+        options = {
+            "title": {"text": f"{selected_currency} Exchange Rate with Moving Average"},
+            "tooltip": {"trigger": "axis"},
+            "xAxis": {"type": "category", "data": dates, "name": "Date"},
+            "yAxis": {
+                "type": "value",
+                "name": "Exchange Rate",
+                "min": f"{min_rate - range_y * 0.1:.2f}",
+                "max": f"{max_rate + range_y * 0.1:.2f}",
+            },
+            "series": [
+                {
+                    "name": "Exchange Rate",
+                    "data": rates,
+                    "type": "line",
+                    "smooth": True,
+                    "lineStyle": {"color": "#5470c6"},
+                },
+                {
+                    "name": f"{window_size}-Period Moving Average",
+                    "data": moving_averages,
+                    "type": "line",
+                    "smooth": True,
+                    "lineStyle": {"color": "#FF0087"},
+                },
+            ],
+        }
+
+        # Display the chart using st_echarts
+        st_echarts(options=options, height="500px")
+    else:
+        st.warning(f"No data available for {selected_currency} to display the Trendline or Moving Average Overlay.")
+else:
+    st.warning("Please select a currency.")
+
+    
 # --- Scatter Plot ---------------------------------------------------------------------------------------------------------------------------
 st.subheader("Scatter Plot (Closing Prices vs. Date)")
 
@@ -538,7 +872,6 @@ if selected_currency in exchange_data:
             "title": {"text": f"{selected_currency} Closing Prices Scatter Plot"},
             "tooltip": {
                 "trigger": "item",
-                "formatter": "{c}",
             },
             "xAxis": {
                 "type": "value",
@@ -553,13 +886,13 @@ if selected_currency in exchange_data:
                 "max": max_price,
                 "dimension": 0,  # Use the first dimension (price) for visual mapping
                 "inRange": {
-                    "color": ["#4292c6"],  # Darker blue gradient
+                    "color": ['#37A2FF', '#80FFA5', '#FFBF00', '#FF0087', '#00DDFF'],  # Darker blue gradient
                     "symbolSize": 10, # Adjust symbol size based on value
                 },
                 "calculable": True,
                 "orient": "horizontal",
                 "left": "center",
-                "bottom": "5%",
+                "bottom": "10%",
             },
             "series": [
                 {
@@ -573,7 +906,7 @@ if selected_currency in exchange_data:
                         "focus": "series",
                         "itemStyle": {
                             "color": "#FFD700",  # Highlight color on hover (Gold)
-                            "borderColor": "#8B4513", # Darker border color (Saddle Brown)
+                            "borderColor": "#FFD700", # Darker border color (Saddle Brown)
                             "borderWidth": 2,
                         },
                     },
@@ -582,10 +915,8 @@ if selected_currency in exchange_data:
         }
 
         # Display the chart using st_echarts
-        st_echarts(options=options, height="700px")
+        st_echarts(options=options, height=f"{800}px")
     else:
         st.warning(f"No data available for {selected_currency} to display the Scatter Plot.")
 else:
     st.warning("Please select a currency.")
-
-
