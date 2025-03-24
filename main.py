@@ -135,7 +135,6 @@ for i, (currency, data) in enumerate(exchange_data.items()):
 
 # --- Charts Display ---
 st.header("Exchange Rate Trends")
-st.write("Visualize the trends of exchange rates over the selected period using ECharts.")
 
 # Create columns for charts
 col1, col2, col3 = st.columns(3)
@@ -400,7 +399,7 @@ if all(not data.empty for data in exchange_data.values()):
 else:
     st.warning("Not all data available for all currencies to display the Gradient Stacked Area Chart.")
     
-# --- Pie/Doughnut Chart and Heatmap in Columns ---
+# --- Pie/Doughnut Chart and Heatmap in Columns ------------------------------------------------------------------------------------------------------------------
 st.subheader("Daily Change Analysis")
 
 col_left, col_right = st.columns([0.3, 0.7])
@@ -514,8 +513,7 @@ with col_right:
     else:
         st.warning("Not all data available for all currencies to display the Heatmap.")
 
-# --- Radar Chart and Box Plot in Columns ---
-# --- Radar Chart and Box Plot in Columns ---
+# --- Radar Chart and Box Plot in Columns ------------------------------------------------------------------------------------------------------------------------------------
 st.subheader("Comparative Analysis")
 
 col_radar, col_box, col_gauge = st.columns([0.4, 0.4, 0.2])  # Added a column for the gauge
@@ -714,7 +712,7 @@ with col_box:
     else:
         st.warning("Please select a currency.")
 
-# Trend Gauge เอาไว้ดูคู่เงินที่เราเลือกมาว่ามีแนวโน้มเป็นขาขึ้นหรือลง
+#--- Trend Gauge ------------------------------------------------------------------------------------------------------------
 with col_gauge:
     st.subheader("Trend Gauge")
 
@@ -779,10 +777,6 @@ with col_gauge:
             st.warning(f"No data available for {selected_currency} to display the Trend Gauge.")
     else:
         st.warning("Please select a currency.")
-
-        
-    
-
 
 #--- Trendline หรือ Moving Average Overlay----------------------------------------------------------------------------------------------------
 st.subheader("Trendline and Moving Average Overlay")
@@ -849,7 +843,6 @@ if selected_currency in exchange_data:
 else:
     st.warning("Please select a currency.")
 
-    
 # --- Scatter Plot ---------------------------------------------------------------------------------------------------------------------------
 st.subheader("Scatter Plot (Closing Prices vs. Date)")
 
